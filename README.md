@@ -19,6 +19,30 @@ Videos for [CPT](https://youtu.be/B8Ur62D3J3U) and [SFT](https://youtu.be/gvZIUE
 - **[neural-txt](https://github.com/avbiswas/neural-txt)** — Inference harness
 - **[paper_instructions_300K-v1](https://huggingface.co/datasets/paperbd/paper_instructions_300K-v1)** — instruction dataset generated from arXiv papers
 
+## Reproducibility audit
+
+The `audit/` directory contains small, reusable checks for dataset boundaries,
+tokenization, dependency provenance, hardware capability and citation coverage. It
+also contains its own locked CPU audit environment, separate from the GPU training
+environment. The checks inspect source and fixtures; they do not claim that training
+or an optimizer step has succeeded.
+
+From the repository root, create the audit environment and run its tests with:
+
+```bash
+uv sync --project audit --locked
+audit/.venv/bin/python -m pytest -q audit/test_audit.py
+```
+
+To write a hardware capability report, provide an output directory:
+
+```bash
+./check_env.sh --verify --output path/to/report
+```
+
+The root project keeps CUDA training dependencies in `pyproject.toml` and `uv.lock`;
+MLX dependencies are installed only on Darwin systems.
+
 
 ## Support
 
