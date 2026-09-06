@@ -14,6 +14,11 @@
 set -euo pipefail
 
 PY="${PY:-python}"
+if [[ "${1:-}" == "--verify" ]]; then
+  shift
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  exec "$PY" "$SCRIPT_DIR/audit/hardware.py" "$@"
+fi
 REPO="${FA_REPO:-Dao-AILab/flash-attention}"
 
 echo "== environment coordinates =="
