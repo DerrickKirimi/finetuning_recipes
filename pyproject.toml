@@ -30,13 +30,13 @@ dependencies = [
     "torchvision==0.23.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "torchvision>=0.25.0; sys_platform != 'linux' or platform_machine != 'x86_64'",
     "sentence-transformers>=3.0.0",
-    "transformers>=4.57.6,<5",
-    "trl>=0.24.0",
+    "transformers==4.57.6",
+    "trl==0.24.0",
     "unsloth>=2026.1.4",
     "xformers==0.0.32.post2; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "neural-txt[hf]>=0.1.6",
-    "mlx>=0.31.2",
-    "mlx-lm>=0.29.1",
+    "mlx>=0.31.2; sys_platform == 'darwin'",
+    "mlx-lm>=0.29.1; sys_platform == 'darwin'",
 ]
 
 [tool.uv.sources]

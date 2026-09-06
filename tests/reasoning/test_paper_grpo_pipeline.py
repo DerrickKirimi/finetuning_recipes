@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import patch
 
@@ -24,7 +25,7 @@ class PaperGRPOPipelineSmokeTests(unittest.TestCase):
 
         reward_model = RewardModel()
         dataset = PaperInstructionDataset(
-            "data/paper_instructions_300K-v2/train.jsonl",
+            os.environ.get("PAPER_GRPO_TEST_DATASET", "data/paper_instructions_300K-v2/train.jsonl"),
             data_size=2,
             seed=env.SEED,
         )
