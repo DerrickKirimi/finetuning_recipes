@@ -1,9 +1,13 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 
-from grpo_utils import generate_responses
+try:
+    from .grpo_utils import generate_responses
+except ImportError:  # Direct ``python reasoning/grpo/rollout.py`` execution.
+    from grpo_utils import generate_responses
 
 
 @dataclass
@@ -34,6 +38,56 @@ class RolloutBatch:
             )
             for i in range(len(self.full_responses))
         ]
+
+
+def _frozen_state(model) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    """Copy policy state that LoRA merge/unmerge is not allowed to change.
+
+    PEFT merges LoRA deltas into base parameters in place. In float16, the
+    following subtraction is not bit reversible, so a merge/unmerge cycle can
+    slowly mutate an otherwise frozen base model. Keep the copies on CPU: this
+    bounds GPU use and the transfer is small relative to a long decode.
+    """
+    parameters = {
+        name: value.detach().cpu().clone()
+        for name, value in model.named_parameters()
+        if not value.requires_grad
+    }
+    buffers = {
+        name: value.detach().cpu().clone()
+        for name, value in model.named_buffers()
+    }
+    return parameters, buffers
+
+
+def _restore_frozen_state(
+    model,
+    snapshot: tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]],
+) -> None:
+    parameters, buffers = snapshot
+    current_parameters = dict(model.named_parameters())
+    current_buffers = dict(model.named_buffers())
+    if not parameters.keys() <= current_parameters.keys():
+        raise RuntimeError("frozen policy parameter set changed during LoRA merge")
+    if not buffers.keys() <= current_buffers.keys():
+        raise RuntimeError("policy buffer set changed during LoRA merge")
+    with torch.no_grad():
+        for name, original in parameters.items():
+            current_parameters[name].copy_(original)
+        for name, original in buffers.items():
+            current_buffers[name].copy_(original)
+
+
+@contextmanager
+def temporarily_merged_adapter(model):
+    """Use merged LoRA decode speed without accepting fp16 base-weight drift."""
+    snapshot = _frozen_state(model)
+    model.merge_adapter()
+    try:
+        yield
+    finally:
+        model.unmerge_adapter()
+        _restore_frozen_state(model, snapshot)
 
 
 def calculate_log_probs(model, input_ids, attention_masks):
@@ -78,6 +132,7 @@ def collect_rollouts(
     top_p,
     temperature,
     logprob_chunk_size,
+    min_new_tokens=0,
 ):
     inputs = {
         "input_ids": batch["input_ids"],
@@ -90,8 +145,7 @@ def collect_rollouts(
     # of the (hundreds of) generation steps runs at plain-base speed instead of
     # recomputing base + A@B every layer. Unmerge afterwards so training (and the
     # old_log_probs forward below) sees the adapter as separate parameters.
-    generation_model.merge_adapter()
-    try:
+    with temporarily_merged_adapter(generation_model):
         full_responses = generate_responses(
             generation_model,
             inputs,
@@ -101,9 +155,8 @@ def collect_rollouts(
             top_p=top_p,
             temperature=temperature,
             do_sample=True,
+            min_new_tokens=min_new_tokens,
         )
-    finally:
-        generation_model.unmerge_adapter()
 
     responses = full_responses[:, input_size:]
     attention_masks = torch.cat(

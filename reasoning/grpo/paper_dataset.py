@@ -38,7 +38,8 @@ class PaperInstructionDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, i):
-        row = format_row(self.data[i])
+        source = dict(self.data[i])
+        row = format_row(source)
         data = {
             "prompt": row["prompt"],
             "task_prompt": [
@@ -47,6 +48,7 @@ class PaperInstructionDataset(Dataset):
             ],
             "answer": row["answer"],
             "item": row,
+            "source": source,
         }
         if self.tokenizer is not None:
             tokenized = self.tokenizer(
@@ -79,6 +81,7 @@ def collate_fn(batch, pad_token_id):
         "task_prompt": [item["task_prompt"] for item in batch],
         "answer": [item["answer"] for item in batch],
         "item": [item["item"] for item in batch],
+        "source": [item["source"] for item in batch],
         "input_ids": pad_sequence(
             [item["input_ids"][0] for item in batch],
             batch_first=True,

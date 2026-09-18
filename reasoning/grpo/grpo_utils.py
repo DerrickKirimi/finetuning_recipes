@@ -11,10 +11,12 @@ def generate_responses(
     top_p=0.95,
     temperature=0.5,
     do_sample=True,
+    min_new_tokens=0,
 ):
     generated_response = llm.generate(
         **inputs,
         max_new_tokens=max_new_tokens,
+        min_new_tokens=min_new_tokens,
         do_sample=do_sample,
         top_p=top_p,
         num_return_sequences=n_rollouts,

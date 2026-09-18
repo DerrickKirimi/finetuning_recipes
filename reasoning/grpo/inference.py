@@ -1,12 +1,17 @@
-import os
 import argparse
+import re
 from accelerate import Accelerator
-import paper_dataset
+try:
+    from . import paper_dataset
+    from .print_utils import pprint
+    from .grpo_utils import generate_responses
+except ImportError:  # Direct ``python reasoning/grpo/inference.py`` execution.
+    import paper_dataset
+    from print_utils import pprint
+    from grpo_utils import generate_responses
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from print_utils import pprint
 import torch
 from tqdm import tqdm
-from grpo_utils import generate_responses
 import pandas as pd
 from pathlib import Path
 
@@ -19,6 +24,8 @@ DATASET = "data/paper_instructions_300K-v2"
 batch_size = 4
 data_size = 20
 EVAL_TEMPERATURE = 0.2
+thinking_pattern = re.compile(r"<think>(.*?)</think>", flags=re.DOTALL)
+fallback_pattern = re.compile(r"<think>(.*)", flags=re.DOTALL)
 
 # Pre-compile regex for post-processing
 def post_process(response):

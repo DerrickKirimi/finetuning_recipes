@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import patch
 
@@ -24,11 +25,12 @@ class PaperGRPOPipelineSmokeTests(unittest.TestCase):
 
         reward_model = RewardModel()
         dataset = PaperInstructionDataset(
-            "data/paper_instructions_300K-v2/train.jsonl",
+            os.environ.get("PAPER_GRPO_TEST_DATASET", "data/paper_instructions_300K-v2/train.jsonl"),
             data_size=2,
             seed=env.SEED,
         )
         items = [dataset[i]["item"] for i in range(2)]
+        sources = [dataset[i]["source"] for i in range(2)]
         completions = [
             f"<think>Use the passage.</think> {items[0]['answer']}",
             f"<think>Use the passage.</think> {items[1]['answer']}",
@@ -41,6 +43,7 @@ class PaperGRPOPipelineSmokeTests(unittest.TestCase):
             )
 
         self.assertEqual(len(items), 2)
+        self.assertTrue(all("instruction" in source and "output" in source for source in sources))
         self.assertEqual(len(reward_batch.total), 2)
         self.assertEqual(set(reward_batch.components), {
             "think_format_reward",
