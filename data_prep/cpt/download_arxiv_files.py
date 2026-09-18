@@ -24,7 +24,8 @@ def query_arxiv(
     )
 
     papers = []
-    for result in search.results():
+    # arxiv 2.0 removed Search.results(); the client owns paging and rate limiting.
+    for result in arxiv.Client().results(search):
         # if result.published.year < 2025:
         #     continue
         # strip version suffix (e.g. 2501.12345v2 -> 2501.12345)

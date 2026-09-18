@@ -1,5 +1,8 @@
 import argparse
+import hashlib
+import importlib.metadata
 import json
+from pathlib import Path
 import torch
 from rich.console import Console
 from rich.table import Table
@@ -16,27 +19,68 @@ except Exception as e:
     print(f"Error details: {e}")
     exit(1)
 
-def calculate_metrics(predictions, references):
+def calculate_metrics(predictions, references, bertscore_model="distilbert-base-uncased",
+                      bertscore_num_layers=5):
     """
     Calculates ROUGE, BLEU, and BERTScore for a list of predictions vs references.
     """
     results = {}
     
     # ROUGE
-    rouge_res = rouge.compute(predictions=predictions, references=references)
-    results['rouge1'] = rouge_res['rouge1']
-    results['rouge2'] = rouge_res['rouge2']
-    results['rougeL'] = rouge_res['rougeL']
+    # The evaluate wrapper's default BootstrapAggregator samples with NumPy randomness
+    # and returns the median of bootstrap means. Identical predictions therefore produced
+    # three different ROUGE aggregates in three bounded battery runs. Compute each row's
+    # F1 and take the direct arithmetic mean instead.
+    rouge_res = rouge.compute(
+        predictions=predictions, references=references, use_aggregator=False)
+    for name in ('rouge1', 'rouge2', 'rougeL'):
+        values = rouge_res[name]
+        results[name] = sum(values) / len(values)
     
     # BLEU
     bleu_res = bleu.compute(predictions=predictions, references=references)
     results['bleu'] = bleu_res['bleu']
 
     # BERTScore (optional, can be slow)
-    results_bert = bertscore.compute(predictions=predictions, references=references, lang="en", model_type="distilbert-base-uncased")
+    # The fixed battery passes an immutable local snapshot here. `num_layers` must be
+    # explicit for a local path because bert-score's lookup table is keyed by the mutable
+    # Hub model name, not by local directories.
+    results_bert = bertscore.compute(
+        predictions=predictions, references=references, lang="en",
+        model_type=str(bertscore_model), num_layers=bertscore_num_layers)
     results['bertscore_f1'] = sum(results_bert['f1']) / len(results_bert['f1'])
 
     return results
+
+
+def metric_runtime_identity(bertscore_model="distilbert-base-uncased",
+                            bertscore_num_layers=5):
+    """Record the evaluator implementations that produced an aggregate."""
+    packages = {}
+    for package in ("evaluate", "rouge-score", "bert-score", "transformers"):
+        try:
+            packages[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            packages[package] = None
+    model_path = Path(bertscore_model)
+    model_files = None
+    if model_path.is_dir():
+        model_files = {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(model_path.iterdir()) if path.is_file()
+        }
+    return {
+        "packages": packages,
+        "evaluate_module_hashes": {
+            "rouge": getattr(rouge, "_hash", None),
+            "bleu": getattr(bleu, "_hash", None),
+            "bertscore": getattr(bertscore, "_hash", None),
+        },
+        "rouge_aggregation": "arithmetic mean of per-row F1; use_aggregator=False",
+        "bertscore_model": str(bertscore_model),
+        "bertscore_num_layers": bertscore_num_layers,
+        "bertscore_model_files_sha256": model_files,
+    }
 
 def main():
     parser = argparse.ArgumentParser(description="Run evaluations on generated JSON.")

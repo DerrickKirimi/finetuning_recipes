@@ -12,6 +12,9 @@ from peft import LoraConfig
 from transformers import TrainingArguments
 
 from transformers import EarlyStoppingCallback
+
+from corpus import documents_to_dataset, load_corpus
+
 early_stopping_callback = EarlyStoppingCallback(
     early_stopping_patience = 3,     # How many steps we will wait if the eval loss doesn't decrease
                                      # For example the loss might increase, but decrease after 3 steps
@@ -38,9 +41,9 @@ def main():
     parser.add_argument("--mix", action="store_true", help="Mix in 20%% scientific_papers arxiv data to prevent forgetting")
     args = parser.parse_args()
 
-    # Load the dataset
-    train_dataset = load_dataset("json", data_files=args.dataset_path, split="train")
-    eval_dataset = load_dataset("json", data_files=args.test_dataset_path, split="train")
+    # Load train and evaluation documents through the corpus boundary.
+    train_dataset = documents_to_dataset(load_corpus(args.dataset_path))
+    eval_dataset = documents_to_dataset(load_corpus(args.test_dataset_path))
 
     # Optional: Mix in general scientific papers data
     if args.mix:

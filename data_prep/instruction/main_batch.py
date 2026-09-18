@@ -1,4 +1,5 @@
 import argparse
+import os
 import random
 from functools import lru_cache
 
@@ -17,7 +18,8 @@ from main import (
     try_generate,
 )
 
-MODEL_NAME = "google/gemma-3-1b-it"
+# Same override name the async and reasoning entry points already use.
+MODEL_NAME = os.environ.get("TEXT_ALBUMENTATIONS_MODEL", "google/gemma-3-1b-it")
 
 
 def batched(items, batch_size: int):

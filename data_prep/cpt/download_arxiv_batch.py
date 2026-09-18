@@ -74,7 +74,8 @@ def collect_candidates(
             max_results=max_results_per_topic,
             sort_by=arxiv.SortCriterion.SubmittedDate,
         )
-        for result in search.results():
+        # arxiv 2.0 removed Search.results(); the client owns paging and rate limiting.
+        for result in arxiv.Client().results(search):
             arxiv_id = normalize_arxiv_id(result.entry_id)
             if arxiv_id in seen:
                 continue

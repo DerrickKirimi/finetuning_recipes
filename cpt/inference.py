@@ -21,13 +21,38 @@ def load_model(model_path, base_model_id="HuggingFaceTB/SmolLM-135M", load_in_4b
         from unsloth import FastLanguageModel
         print("🚀 CUDA detected. Using Unsloth.")
         
-        # Unsloth handles adapters automatically if model_path points to one
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name = model_path,
-            max_seq_length = 2048,
-            dtype = None,
-            load_in_4bit = load_in_4bit,
-        )
+        # Unsloth resolves an adapter's base from its adapter_config, which records the
+        # path it was TRAINED against - e.g. /kaggle/working/... - not wherever the parent
+        # lives now. Passing only model_path therefore ignores an explicitly supplied
+        # parent on CUDA, and can silently resolve a different one or fail outright. The
+        # CPU branch below honours base_model_id; this one must too.
+        is_adapter = os.path.exists(os.path.join(model_path, "adapter_config.json"))
+        if is_adapter and base_model_id is not None:
+            print(f"Adapter + explicit base: loading {base_model_id}, then applying {model_path}")
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name = base_model_id,
+                max_seq_length = 2048,
+                dtype = None,
+                load_in_4bit = load_in_4bit,
+            )
+            model = PeftModel.from_pretrained(model, model_path)
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(model_path)
+            except Exception as exc:
+                # Not interchangeable with the base tokenizer. SFT saves ChatML with
+                # <|im_end|> mapped onto id 0 and <|endoftext|> displaced to 2 - the
+                # reverse of the base - so falling back silently feeds the model id 2
+                # wherever training used id 0, in every prompt, with no visible error.
+                print(f"WARNING: no usable tokenizer at {model_path} "
+                      f"({type(exc).__name__}: {exc}); falling back to the base tokenizer. "
+                      f"Special-token ids may not match those this adapter was trained on.")
+        else:
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name = model_path,
+                max_seq_length = 2048,
+                dtype = None,
+                load_in_4bit = load_in_4bit,
+            )
         FastLanguageModel.for_inference(model)
     else:
         print("🐢 CUDA not detected. Using standard Hugging Face.")
@@ -38,7 +63,10 @@ def load_model(model_path, base_model_id="HuggingFaceTB/SmolLM-135M", load_in_4b
         # 1. Load Tokenizer
         try:
             tokenizer = AutoTokenizer.from_pretrained(model_path)
-        except:
+        except Exception as exc:
+            print(f"WARNING: no usable tokenizer at {model_path} "
+                  f"({type(exc).__name__}: {exc}); falling back to {base_model_id}. "
+                  f"Special-token ids may not match those this checkpoint was trained on.")
             tokenizer = AutoTokenizer.from_pretrained(base_model_id)
             
         # 2. Check if model_path is likely an adapter
@@ -95,7 +123,15 @@ def generate_batch(model, tokenizer, prompts, max_new_tokens=64, batch_size=4, r
                 max_new_tokens=max_new_tokens, 
                 use_cache=True,
                 pad_token_id=tokenizer.pad_token_id,
-                repetition_penalty=repetition_penalty
+                repetition_penalty=repetition_penalty,
+                # Explicitly greedy. Without this the model's own generation_config
+                # decides, so a battery meant to give the same answer twice might not.
+                # Sampling parameters are cleared for the same reason: leaving them set
+                # with do_sample=False emits warnings and invites a later accidental flip.
+                do_sample=False,
+                temperature=None,
+                top_p=None,
+                top_k=None,
             )
         
         # Decode
