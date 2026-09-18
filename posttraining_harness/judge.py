@@ -148,6 +148,8 @@ class JudgeConfig:
     max_attempts: int = 4
     timeout_seconds: float = 60.0
     backoff_seconds: float = 2.0
+    # Parser tolerance, not a request setting, so it is deliberately outside generation_config() and the cache key.
+    max_rationale_words: int = 80
 
     def __post_init__(self) -> None:
         if not self.model.strip():
@@ -266,7 +268,7 @@ class HttpTransport:
             return status, raw
 
 
-def parse_response(payload) -> dict:
+def parse_response(payload, max_rationale_words: int = 80) -> dict:
     """Classify a 200 response. Returns outcome, verdict, rationale, usage, model version and finish reason."""
     out = {"outcome": "parse_failure", "verdict": None, "rationale": None, "usage": {}, "model_version": None,
            "response_id": None, "finish_reason": None, "detail": None}
@@ -303,8 +305,8 @@ def parse_response(payload) -> dict:
     if not isinstance(rationale, str) or not rationale.strip():
         out["detail"] = "rationale missing or empty"
         return out
-    if len(rationale.split()) > 80:
-        out["detail"] = "rationale exceeds 80 words"
+    if len(rationale.split()) > max_rationale_words:
+        out["detail"] = f"rationale exceeds {max_rationale_words} words"
         return out
     out.update(outcome="ok", verdict=verdict["verdict"], rationale=rationale.strip())
     return out
@@ -407,7 +409,7 @@ def _judge_pairs_locked(pairs: list[dict], config: JudgeConfig, log_path: Path, 
                     if status not in RETRY_STATUSES:
                         raise RequestRejected(f"HTTP {status} for {pair['pair_id']} {order}: {record['detail'][:300]}")
                     break
-                parsed = parse_response(payload)
+                parsed = parse_response(payload, config.max_rationale_words)
                 charged = config.measured_usd(parsed["usage"]) if parsed["usage"] else reserve
                 if charged > reserve + 1e-12:
                     record.update(
@@ -420,7 +422,8 @@ def _judge_pairs_locked(pairs: list[dict], config: JudgeConfig, log_path: Path, 
                     records.append(record)
                     append_record(log_path, record, key)
                     raise ReservationUnderflow(record["detail"])
-                record.update(parsed, charged_usd=charged, raw_response=payload)
+                record.update(parsed, charged_usd=charged, raw_response=payload,
+                              max_rationale_words=config.max_rationale_words)
                 if parsed["outcome"] == "ok":
                     record["model_shown_preferred"] = {"A": shown["A"], "B": shown["B"], "tie": "tie"}[parsed["verdict"]]
                     done.add(ck)
@@ -572,6 +575,8 @@ def main(argv=None) -> int:
         p.add_argument("--price-input", type=float, required=True)
         p.add_argument("--price-output", type=float, required=True)
         p.add_argument("--secrets-file", type=Path, default=None)
+        p.add_argument("--max-rationale-words", type=int, default=JudgeConfig.max_rationale_words,
+                       help="parser limit on rationale length; the prompt still asks for at most 80 words")
     s = sub.add_parser("summarize")
     s.add_argument("--pairs", required=True, type=Path)
     s.add_argument("--log", required=True, type=Path)
@@ -587,7 +592,8 @@ def main(argv=None) -> int:
     budget = None if args.thinking_budget is None or args.thinking_budget.lower() == "none" else int(args.thinking_budget)
     config = JudgeConfig(model=args.model, cap_usd=args.cap_usd, seed=args.seed, max_output_tokens=args.max_output_tokens,
                          thinking_budget=budget, thinking_level=args.thinking_level,
-                         price_input_per_million=args.price_input, price_output_per_million=args.price_output)
+                         price_input_per_million=args.price_input, price_output_per_million=args.price_output,
+                         max_rationale_words=args.max_rationale_words)
     pairs = read_pairs(args.pairs)
     if args.command == "dry-run":
         reserves, previews = [], []

@@ -267,6 +267,16 @@ class ParseTests(unittest.TestCase):
         bad_json = ok_payload()
         bad_json["candidates"][0]["content"]["parts"][0]["text"] = "A is better"
         self.assertEqual(judge.parse_response(bad_json)["outcome"], "parse_failure")
+
+    def test_rationale_word_limit_is_a_parser_setting(self):
+        long = json.dumps({"rationale": " ".join(["word"] * 120), "verdict": "A"})
+        payload = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": long}]}}]}
+        self.assertEqual(judge.parse_response(payload)["outcome"], "parse_failure")
+        self.assertEqual(judge.parse_response(payload, max_rationale_words=200)["outcome"], "ok")
+        # a parser tolerance must not change request identity, or cached verdicts would silently fork
+        base = judge.JudgeConfig(model="m")
+        wide = judge.JudgeConfig(model="m", max_rationale_words=200)
+        self.assertEqual(judge.cache_key(base, "p", "AB", "f"), judge.cache_key(wide, "p", "AB", "f"))
         self.assertEqual(judge.parse_response(ok_payload(verdict="C"))["outcome"], "parse_failure")
         self.assertEqual(judge.parse_response(ok_payload(rationale=" "))["outcome"], "parse_failure")
         too_long = " ".join(["word"] * 81)
