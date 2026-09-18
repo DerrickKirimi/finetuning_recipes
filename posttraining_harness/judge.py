@@ -317,7 +317,7 @@ def parse_response(payload, max_rationale_words: int = 80) -> dict:
 def read_log(path: Path) -> list[dict]:
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text().split("\n") if line.strip()]
 
 
 def spent_usd(records: list[dict]) -> float:
@@ -553,7 +553,8 @@ def validate_pairs(pairs: list[dict]) -> None:
 
 
 def read_pairs(path: Path) -> list[dict]:
-    pairs = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+    # JSONL is newline-delimited: str.splitlines() would also break records on U+0085, U+2028 and similar
+    pairs = [json.loads(line) for line in Path(path).read_text().split("\n") if line.strip()]
     validate_pairs(pairs)
     return pairs
 

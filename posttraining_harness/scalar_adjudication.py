@@ -252,7 +252,7 @@ def verify_production(groups: list[dict], log_path: Path, summary_path: Path, pi
     expected = {(group["group_id"], "forward") for group in groups}
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     labels_path = summary_path.with_name(summary["labels_path"])
-    labels = [json.loads(line) for line in labels_path.read_text().splitlines() if line]
+    labels = [json.loads(line) for line in labels_path.read_text().split("\n") if line.strip()]
     identities = configuration_identity(records)
     versions = {
         record.get("model_version")

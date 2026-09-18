@@ -268,6 +268,15 @@ class ParseTests(unittest.TestCase):
         bad_json["candidates"][0]["content"]["parts"][0]["text"] = "A is better"
         self.assertEqual(judge.parse_response(bad_json)["outcome"], "parse_failure")
 
+    def test_pairs_reader_keeps_records_containing_unicode_line_breaks(self):
+        record = {"pair_id": "p1", "index": 1, "task": "t", "reference": "r\u0085still r",
+                  "answers": {"sft": "a\u2028b", "cpt": "c"}, "model_a": "sft", "model_b": "cpt"}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "pairs.jsonl")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+            self.assertEqual(judge.read_pairs(path), [record])
+
     def test_rationale_word_limit_is_a_parser_setting(self):
         long = json.dumps({"rationale": " ".join(["word"] * 120), "verdict": "A"})
         payload = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": long}]}}]}

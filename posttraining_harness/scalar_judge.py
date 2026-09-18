@@ -457,7 +457,7 @@ def summarize(groups: list[dict], log_path: Path) -> dict:
 
 
 def read_groups(path: Path) -> list[dict]:
-    groups = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    groups = [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
     validate_groups(groups)
     return groups
 
