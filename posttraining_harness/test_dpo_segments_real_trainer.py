@@ -324,6 +324,30 @@ class NonFiniteLossTests(unittest.TestCase):
 
 
 @unittest.skipIf(MISSING, f"needs {MISSING}; run under the fork's main .venv")
+class LossVariantTests(unittest.TestCase):
+    """--rpo_alpha and --ld_alpha reach TRL's loss through the production config path, not just its config object."""
+
+    def history(self, **overrides):
+        with tempfile.TemporaryDirectory() as d:
+            argv = ["--batch_size", "2", "--grad_accum", "1", "--max_steps", "2", "--logging_steps", "1",
+                    "--dataloader_num_workers", "0"]
+            _, trainer = make_trainer(d, make_rows(8), make_rows(2), argv, save_strategy="no", eval_strategy="no",
+                                      load_best_model_at_end=False, **overrides)
+            trainer.train()
+            return [h for h in trainer.state.log_history if "loss" in h]
+
+    def test_rpo_adds_the_nll_term_and_changes_the_loss(self):
+        plain, rpo = self.history(), self.history(rpo_alpha=1.0)
+        self.assertNotIn("nll_loss", plain[0])
+        self.assertIn("nll_loss", rpo[0])
+        self.assertNotAlmostEqual(plain[0]["loss"], rpo[0]["loss"], places=6)
+
+    def test_ld_changes_the_loss_when_answer_lengths_differ(self):
+        plain, ld = self.history(), self.history(ld_alpha=0.5)
+        self.assertNotAlmostEqual(plain[0]["loss"], ld[0]["loss"], places=6)
+
+
+@unittest.skipIf(MISSING, f"needs {MISSING}; run under the fork's main .venv")
 class DigestTests(unittest.TestCase):
     def test_optimizer_digest_covers_every_state_and_group_setting(self):
         from types import SimpleNamespace
