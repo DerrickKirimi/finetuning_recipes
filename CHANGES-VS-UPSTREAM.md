@@ -42,6 +42,17 @@ each stage did what it claims. Existing files change only where the port require
   - verification that a resumed run trains exactly the rows the seeded sampler would have, across epoch boundaries and
     the data loader's one-batch prefetch.
 - `train_preference.py` keeps its defaults; every new control is opt-in.
+- Two DPO-only loss options, both off unless asked for: `--rpo_alpha` (RPO's likelihood term on the chosen answer)
+  and `--ld_alpha` (LD-DPO's weight on the part of a response beyond what the two answers share). They are passed to
+  TRL only for `--method dpo`, rejected for ORPO, and reported in the run record as the constructed trainer holds
+  them, so a silent no-op cannot pass for a configured run.
+- `preference_optimization/trl_compat.py` corrects TRL 0.24's LD-DPO masking. Upstream selects the shared-prefix
+  tokens by absolute position while the per-token log-probabilities span prompt + completion and are rolled one place
+  right, so every masked sum is zero: the loss stops depending on the policy and training runs to completion with a
+  gradient norm of exactly 0.0. The correction ranks tokens by the cumulative completion mask on the rolled grid,
+  which makes `ld_alpha = 1.0` reproduce plain DPO exactly, as the paper defines it. Applied only when `--ld_alpha`
+  is set; idempotent, reversible, and recorded. Fixed upstream in TRL v1.0.0, so it matters only for the 0.2x series
+  pinned here.
 - `posttraining_harness/dpo_memory_probe.py` measures the memory envelope one batch size per process;
   `dpo_tokens.py` checks chat formatting and tokenization without loading weights.
 
