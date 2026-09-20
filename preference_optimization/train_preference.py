@@ -32,11 +32,11 @@ try:
     from preference_optimization import dpo_setup as setup
     from preference_optimization.training_controls import (make_stop_callback, select_precision, terminal_record,
                                                            validate_resume_checkpoint)
-    from preference_optimization.trl_compat import patch_trl_optional_dependency_checks
+    from preference_optimization.trl_compat import patch_ld_dpo_mask, patch_trl_optional_dependency_checks
 except ModuleNotFoundError:
     import dpo_setup as setup
     from training_controls import make_stop_callback, select_precision, terminal_record, validate_resume_checkpoint
-    from trl_compat import patch_trl_optional_dependency_checks
+    from trl_compat import patch_ld_dpo_mask, patch_trl_optional_dependency_checks
 
 import torch
 from transformers import EarlyStoppingCallback
@@ -128,6 +128,9 @@ def main() -> None:
 
     ensure_trl_warning_state(model)
     config_kwargs = setup.preference_config_kwargs(args, precision, output_dir)
+    dpo_only = {k: v for k, v in (("rpo_alpha", args.rpo_alpha), ("ld_alpha", args.ld_alpha)) if v is not None}
+    if dpo_only and args.method != "dpo":
+        raise SystemExit(f"{sorted(dpo_only)} apply to --method dpo only")
 
     if args.method == "dpo":
         PatchDPOTrainer()
@@ -137,11 +140,14 @@ def main() -> None:
         trainer = DPOTrainer(
             model=model,
             ref_model=None,
-            args=DPOConfig(**config_kwargs),
+            args=DPOConfig(**config_kwargs, **dpo_only),
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             processing_class=tokenizer,
         )
+        if args.ld_alpha is not None:
+            # TRL 0.24's LD-DPO masks by absolute position and silently zeroes every log-prob (no gradient).
+            record["ld_dpo_mask_patch"] = patch_ld_dpo_mask(trainer)
     else:
         # ORPO
         patch_trl_optional_dependency_checks()

@@ -42,6 +42,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lora_r", type=int, default=32)
     p.add_argument("--learning_rate", "-lr", type=float, default=2e-4)
     p.add_argument("--beta", type=float, default=0.1, help="DPO/ORPO beta hyperparameter.")
+    p.add_argument("--rpo_alpha", type=float, default=None,
+                   help="DPO only: weight of the NLL term on the chosen answer (RPO). Off when unset.")
+    p.add_argument("--ld_alpha", type=float, default=None,
+                   help="DPO only: LD-DPO weight on the verbose (beyond shared length) token log-probs. Off when unset.")
     p.add_argument("--max_prompt_length", type=int, default=1536)
     p.add_argument("--dataset_revision", type=str, default=None, help="Pin the preference dataset to this revision.")
     p.add_argument("--dataloader_num_workers", type=int, default=8)
@@ -955,6 +959,10 @@ def trainer_record(trainer) -> dict:
         "restore_callback_states_from_checkpoint": trainer.args.restore_callback_states_from_checkpoint,
         "model_accepts_loss_kwargs": getattr(trainer, "model_accepts_loss_kwargs", None),
         "gradient_accumulation_steps": trainer.args.gradient_accumulation_steps,
+        # The DPO loss variant actually configured on the trainer (None = plain DPO for the alpha terms).
+        "loss_type": getattr(trainer.args, "loss_type", None),
+        "rpo_alpha": getattr(trainer.args, "rpo_alpha", None),
+        "ld_alpha": getattr(trainer.args, "ld_alpha", None),
         # Transformers 4.x accumulates itself and leaves Accelerate at 1; anything else would divide the loss twice.
         "accelerator_gradient_accumulation_steps": getattr(getattr(trainer, "accelerator", None),
                                                            "gradient_accumulation_steps", None),
