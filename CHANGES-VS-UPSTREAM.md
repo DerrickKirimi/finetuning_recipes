@@ -1,9 +1,9 @@
 # Changes relative to the upstream course repository
 
-This branch builds on [`avbiswas/finetuning_recipes`](https://github.com/avbiswas/finetuning_recipes) at commit
-`9b3154a`. The course's pipeline, configurations, datasets and training code are the foundation of everything here.
-The goal of the changes is to run that pipeline end to end on a single 16 GB Tesla T4, and to be able to check that
-each stage did what it claims. Existing files change only where the port required it; most additions are new modules.
+This fork incorporates [`avbiswas/finetuning_recipes`](https://github.com/avbiswas/finetuning_recipes) through commit
+`aa4d7a2`. The course pipeline, configurations, datasets and training code are the foundation of this work. The
+changes adapt the full pipeline to a single 16 GB Tesla T4, make long stages resumable, and add explicit evaluation
+for each stage. Existing files change only where the port requires it; most additions are new modules.
 
 ## Across all stages
 
@@ -12,7 +12,7 @@ each stage did what it claims. Existing files change only where the port require
 | Hardware | capability-based precision (fp16 with loss scaling where the GPU has no native bf16), an executable environment check | `posttraining_harness/hardware.py`, `check_env.sh` |
 | Inputs | immutable Hub revisions and file hashes for every model, tokenizer and dataset input | `posttraining_harness/assets.py`, `posttraining_harness/dependency_sources.py` |
 | Environment | pinned GPU environment for the stages; a separate locked CPU environment for the harness | `pyproject.toml`, `uv.lock`, `posttraining_harness/pyproject.toml` |
-| Data boundaries | exact prompt/passage leakage measurement; grouped splits recorded as manifests of indices and hashes, never as copied rows | `posttraining_harness/data_boundaries.py`, `posttraining_harness/sft_split.py`, `preference_optimization/split_manifest.py` |
+| Data boundaries | exact prompt/passage overlap measurement; grouped splits recorded as manifests of indices and hashes, never as copied rows | `posttraining_harness/data_boundaries.py`, `posttraining_harness/sft_split.py`, `preference_optimization/split_manifest.py` |
 
 ## Continued pre-training
 
@@ -46,13 +46,12 @@ each stage did what it claims. Existing files change only where the port require
   and `--ld_alpha` (LD-DPO's weight on the part of a response beyond what the two answers share). They are passed to
   TRL only for `--method dpo`, rejected for ORPO, and reported in the run record as the constructed trainer holds
   them, so a silent no-op cannot pass for a configured run.
-- `preference_optimization/trl_compat.py` corrects TRL 0.24's LD-DPO masking. Upstream selects the shared-prefix
-  tokens by absolute position while the per-token log-probabilities span prompt + completion and are rolled one place
-  right, so every masked sum is zero: the loss stops depending on the policy and training runs to completion with a
-  gradient norm of exactly 0.0. The correction ranks tokens by the cumulative completion mask on the rolled grid,
-  which makes `ld_alpha = 1.0` reproduce plain DPO exactly, as the paper defines it. Applied only when `--ld_alpha`
-  is set; idempotent, reversible, and recorded. Fixed upstream in TRL v1.0.0, so it matters only for the 0.2x series
-  pinned here.
+- `preference_optimization/trl_compat.py` adapts TRL 0.24's LD-DPO masking to the rolled prompt-plus-completion grid.
+  In that release, the shared prefix is selected by absolute position while the token log-probabilities are rolled
+  one place, which can leave the masked sum constant and the gradient norm at 0.0. The compatibility layer ranks
+  tokens within the completion instead. With `ld_alpha = 1.0`, it reproduces plain DPO exactly, as the paper defines
+  the no-op case. It is applied only when `--ld_alpha` is set and is idempotent, reversible and recorded. TRL v1.0.0
+  includes the corrected behavior, so this layer is limited to the pinned 0.2x series.
 - `posttraining_harness/dpo_memory_probe.py` measures the memory envelope one batch size per process;
   `dpo_tokens.py` checks chat formatting and tokenization without loading weights.
 
@@ -89,7 +88,9 @@ each stage did what it claims. Existing files change only where the port require
   file outside any working tree, refused if readable by others, and sent only in a request header.
 - `posttraining_harness/scalar_judge.py` and `scalar_adjudication.py`: budgeted, resumable grouped scalar
   adjudication.
-- `posttraining_harness/kev_judge.py` and `kev_analysis.py`: a pinned, open Kev-4B decision judge. Each pair is
+- `posttraining_harness/kev_judge.py` and `kev_analysis.py`: a pinned, open
+  [Kev-4B decision judge](https://huggingface.co/jaredpalmer/kev-4b/blob/485ace8703592fcf405488b262449990824cfed1/README.md)
+  implementing TypeSafe's public SystemOne contract. Each pair is
   scored in both answer placements and three option-label rotations; raw probabilities are retained, resumable rows
   are bound to exact input bytes, and a separate analyzer recomputes every aggregate. Runtime instructions and the
   measured T4 envelope are in `posttraining_harness/KEV_JUDGE.md`.
@@ -98,5 +99,5 @@ each stage did what it claims. Existing files change only where the port require
 
 Each stage's additions come with tests: the harness's own suite in `posttraining_harness/test_*.py`, and stage tests
 under `tests/cpt/`, `tests/reasoning/` and `tests/reward_models/`. Several run the real trainers on CPU with tiny
-models to prove equivalences — for example that accumulating over 32 microbatches produces the same update as one
+models to check equivalences—for example, that accumulating over 32 microbatches produces the same update as one
 batch of 128, and that a paused and resumed run matches an uninterrupted one.
