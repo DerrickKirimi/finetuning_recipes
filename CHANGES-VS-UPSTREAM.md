@@ -89,6 +89,10 @@ each stage did what it claims. Existing files change only where the port require
   file outside any working tree, refused if readable by others, and sent only in a request header.
 - `posttraining_harness/scalar_judge.py` and `scalar_adjudication.py`: budgeted, resumable grouped scalar
   adjudication.
+- `posttraining_harness/kev_judge.py` and `kev_analysis.py`: a pinned, open Kev-4B decision judge. Each pair is
+  scored in both answer placements and three option-label rotations; raw probabilities are retained, resumable rows
+  are bound to exact input bytes, and a separate analyzer recomputes every aggregate. Runtime instructions and the
+  measured T4 envelope are in `posttraining_harness/KEV_JUDGE.md`.
 
 ## Tests
 

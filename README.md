@@ -38,7 +38,8 @@ In brief:
   preservation across GRPO's merged-adapter decoding; data-position verification across epochs.
 - **Data boundaries.** Grouped, contamination-filtered splits recorded as manifests of row indices and hashes.
 - **Evaluation.** A frozen evaluation battery with deterministic scoring, pinned scorer weights and paired
-  bootstrap intervals, plus pairwise and scalar LLM-judge clients.
+  bootstrap intervals, pairwise and scalar LLM-judge clients, and a pinned open Kev-4B decision judge with
+  answer-order and option-rotation controls.
 
 ### The harness
 
@@ -58,6 +59,11 @@ Hardware capability report:
 
 Generated fixtures, reports, logs and model artifacts belong in an output directory you supply, outside the
 repository.
+
+The open decision-model judge is documented separately in
+[`posttraining_harness/KEV_JUDGE.md`](posttraining_harness/KEV_JUDGE.md). Its scorer retains all six raw probability
+distributions per pair; an independent analyzer recomputes the reported credit, bootstrap interval, placement
+sensitivity, option-rotation sensitivity, and optional correlation with another pairwise judge.
 
 Continued pre-training reads local arXiv JSONL through `load_corpus() -> Iterable[Document]` in `cpt/corpus.py`, so
 other corpus sources can implement the same interface without changing the trainer.
