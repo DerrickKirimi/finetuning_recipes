@@ -23,7 +23,7 @@ and extends its recipes for reproducible single-T4 execution and evaluation.
 
 ## This fork: a single-T4 port with a post-training harness
 
-I ran the course pipeline—continued pre-training, SFT, DPO, a reward model and GRPO—for
+I ran the course pipeline — continued pre-training, SFT, DPO, a reward model and GRPO — for
 `HuggingFaceTB/SmolLM-135M` on one 16 GB Tesla T4. This fork adds resumable stage runners, explicit
 data boundaries, evaluation tools and hardware-aware configurations. The course code remains the
 foundation: changes to existing files are limited, while most additions live in new modules.
@@ -55,7 +55,7 @@ probability distribution for each question in one forward pass. It does not gene
 by token. I self-hosted
 [`jaredpalmer/kev-4b` at the exact revision used here](https://huggingface.co/jaredpalmer/kev-4b/blob/485ace8703592fcf405488b262449990824cfed1/README.md)
 on a Kaggle T4 and used it as a pairwise judge. Kev implements TypeSafe's public `/v1/systemone` contract, but it is
-a different model with different training data and failure modes; it is not a local copy of Jev.
+a different model with different training data and failure modes.
 
 The frozen run scored every answer pair in both placements and under three option-label rotations. It completed 500
 pairs in 24.7 minutes with 8.80 GiB peak reserved VRAM. Kev assigned the tested LD-DPO model continuous credit
